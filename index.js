@@ -32,6 +32,12 @@ async function initializeAssistant() {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+//setting gloabl reusable variables
+let globalSummaries = null;
+let globalCharacteristics = null;
+let globalDifferences = null;
+
+
 //backend enpoints
 
 //endpoint to summarize example.pdf from assets folder
@@ -49,16 +55,18 @@ app.get("/pdf/summary/example", (req, res) => {
     const pdfText = extractTextFromPDFData(pdfData);
 
     const instructions = `
-        Using the following text extracted from a PDF file of children story by Hans Christian Andersen, write two concise summaries (max 200 words each):
+        Using the following text extracted from a PDF file of children story by Hans Christian Andersen, write two concise summaries (max 100 words each):
         ${pdfText}
 
         Return in following format:
         "1. Summary 1:"
-        "2. Summary 2:"
+        "2. Summary 2:" 
 
         Analyse both summaries and return in following format:
         "1. Characteristics 1:" What are the characteristics of the Summary 1?
         "2. Characteristics 2:" What are the characteristics of the Summary 2?
+        "3. Differences 1:" What differentiates Summary 1 from Summary 2?
+        "4. Differences 2:" What differentiates Summary 2 from Summary 1?
       `;
 
     createThread()
@@ -73,20 +81,29 @@ app.get("/pdf/summary/example", (req, res) => {
           .then((response) => {
             //console.log("response", response);
             const match = response.match(
-              /1\. Summary 1:\s*(.*?)\s*2\. Summary 2:\s*(.*?)\s*1\. Characteristics 1:\s*(.*?)\s*2\. Characteristics 2:\s*(.*)/s
+              /1\. Summary 1:\s*(.*?)\s*2\. Summary 2:\s*(.*?)\s*1\. Characteristics 1:\s*(.*?)\s*2\. Characteristics 2:\s*(.*?)\s*3\. Differences 1:\s*(.*?)\s*4\. Differences 2:\s*(.*)/s
             );
             if (match){
               const summary1 = match[1].trim();
               const summary2 = match[2].trim();
               const characteristics1 = match[3].trim();
               const characteristics2 = match[4].trim();
+              const differences1 = match[5].trim();
+              const differences2 = match[6].trim();
+
+              //storing the extracted values in global variables
+              globalSummaries = {summary1, summary2};
+              globalCharacteristics = {characteristics1, characteristics2};
+              globalDifferences = {differences1, differences2};
 
               console.log("summary 1", summary1);
               console.log("summary 2", summary2);
               console.log("characteristics 1", characteristics1);
               console.log("characteristics 2", characteristics2);
+              console.log("differences 1", differences1);
+              console.log("differences 2", differences2);
 
-              res.json({ summary1, summary2, characteristics1, characteristics2 });
+              res.json({ summary1, summary2, characteristics1, characteristics2, differences1, differences2 });
             }
           })
           .catch((error) => {
@@ -138,8 +155,24 @@ app.get("/pdf/summary/all", (req, res) => {
         const pdfText = extractTextFromPDFData(pdfData);
 
         const instructions = `
-          Using the following text extracted from a PDF file, write a concise summary (max 200 words):
-          ${pdfText}
+
+          Consider this analysis from a story:
+          
+          Summary 1: ${globalSummaries.summary1}
+          Summary 2: ${globalSummaries.summary2}
+          
+          Characteristics 1: ${globalCharacteristics.characteristics1}
+          Characteristics 2: ${globalCharacteristics.characteristics2}
+          
+          Differences 1: ${globalDifferences.differences1}
+          Differences 2: ${globalDifferences.differences2}
+
+          Using this analysis, write two summaries similar to Summary 1 and Summary 2 for the new PDF file (max 100 words).
+           ${pdfText}
+
+           Return in following format:
+          "1. Summary (Book Name) 1:" 
+          "2. Summary (Book Name) 2:" 
         `;
 
         createThread()
@@ -152,6 +185,7 @@ app.get("/pdf/summary/all", (req, res) => {
               instructions
             )
               .then((response) => {
+                console.log("response", response);
                 summaries.push({ file: pdfFilePath, summary: response });
                 processNextFile();
               })
