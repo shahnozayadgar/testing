@@ -37,11 +37,15 @@ let globalSummaries = null;
 let globalCharacteristics = null;
 let globalDifferences = null;
 
+//global variables
+let lastGeneratedSummary = null;
+
+
 
 //backend enpoints
 
 //endpoint to summarize example.pdf from assets folder
-app.get("/pdf/summary/example", (req, res) => {
+app.get("/pdf/summary/feedback", (req, res) => {
   const pdfFilePath = path.join(__dirname, "assets", "snow-man.pdf");
   const pdfParserInstance = new PDFParser();
 
@@ -122,103 +126,210 @@ app.get("/pdf/summary/example", (req, res) => {
   pdfParserInstance.loadPDF(pdfFilePath);
 });
 
-// Endpoint to summarize all PDFs in the assets folder
-app.get("/pdf/summary/all", (req, res) => {
-  const assetsDir = path.join(__dirname, "assets");
-  fs.readdir(assetsDir, (err, files) => {
-    if (err) {
-      return res
-        .status(500)
-        .json({ error: "Failed to read assets directory: " + err });
-    }
+app.get("/pdf/summary/one", (req, res) => {
+  const pdfFilePath = path.join(__dirname, "assets", "little-match-girl.pdf");
+  const pdfParserInstance = new PDFParser();
 
-    const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
-    const summaries = [];
+  pdfParserInstance.on("pdfParser_dataError", (errData) => {
+    res.status(500).json({
+      error: "An error occurred while parsing the PDF: " + errData.parserError,
+    });
+  });
 
-    const processNextFile = () => {
-      if (pdfFiles.length === 0) {
-        return res.json({ summaries });
-      }
+  pdfParserInstance.on("pdfParser_dataReady", (pdfData) => {
+    const pdfText = extractTextFromPDFData(pdfData);
 
-      const pdfFilePath = path.join(assetsDir, pdfFiles.shift());
-      const pdfParserInstance = new PDFParser();
+    const instructions = `
+        Using the following text extracted from a PDF file of children story by Hans Christian Andersen, write a concise summary (within 150 words):
+        ${pdfText}
+      `;
 
-      pdfParserInstance.on("pdfParser_dataError", (errData) => {
-        summaries.push({
-          file: pdfFilePath,
-          error: "Failed to parse PDF: " + errData.parserError,
-        });
-        processNextFile();
-      });
-
-      pdfParserInstance.on("pdfParser_dataReady", (pdfData) => {
-        const pdfText = extractTextFromPDFData(pdfData);
-
-        const instructions = `
-
-          You are an advanced text summarization assistant. 
-          Follow these steps:
-
-          Step 1. Read and consider the two example summaries:
-          Summary 1: ${globalSummaries.summary1}
-          Summary 2: ${globalSummaries.summary2}
-
-          Step 2. Identidy and note the characteristics of each summaries (e.g., tone, style, clarity):
-          Characteristics 1: ${globalCharacteristics.characteristics1}
-          Characteristics 2: ${globalCharacteristics.characteristics2}
-          
-          Step 3. Analyze the differences and what elements set summaries apart:
-          Differences 1: ${globalDifferences.differences1}
-          Differences 2: ${globalDifferences.differences2}
-
-          Using this analysis, write and return in following format:
-          1. Return a list of what you like (strength) and dislike (weaknesses) about each summary.
-          2. Return a set of criterias for a good summary.
-          3. Write two summaries similar to Summary 1 and Summary 2 for the new PDF file (max 100 words).
-          ${pdfText}
-          "- Summary (Book Name) 1:" 
-          "- Summary (Book Name) 2:" 
-        `;
-
-        createThread()
-          .then((thread) => {
-            const thread_id = thread.id;
-            invokeAssistant(
-              assistant,
-              thread_id,
-              "Summarize PDF file",
-              instructions
-            )
-              .then((response) => {
-                console.log("response", response);
-                summaries.push({ file: pdfFilePath, summary: response });
-                processNextFile();
-              })
-              .catch((error) => {
-                summaries.push({
-                  file: pdfFilePath,
-                  error:
-                    "Failed to summarize PDF: " +
-                    (error.response ? error.response.data : error.message),
-                });
-                processNextFile();
-              });
+    createThread()
+      .then((thread) => {
+        const thread_id = thread.id;
+        invokeAssistant(
+          assistant,  
+          thread_id,
+          "Summarize PDF file",
+          instructions
+        )
+          .then((response) => {
+            console.log("response", response);
+            lastGeneratedSummary = response;
+            res.json({ summary: response });
           })
           .catch((error) => {
-            summaries.push({
-              file: pdfFilePath,
-              error: "Failed to create thread: " + error,
+            res.status(500).json({
+              error:
+                "An error occurred while summarizing the PDF: " +
+                (error.response ? error.response.data : error.message),
             });
-            processNextFile();
           });
+      })
+      .catch((error) => {
+        res.status(500).json({ error: "Failed to create thread: " + error });
       });
-
-      pdfParserInstance.loadPDF(pdfFilePath);
-    };
-
-    processNextFile();
   });
+
+  pdfParserInstance.loadPDF(pdfFilePath);
 });
+
+//endpoint to save the user's preferred summary
+app.post("/pdf/summary/save", (req, res) => {
+  const { summary } = req.body;
+  if (!summary){
+    return res.status(400).json({error: "summary is required"});
+  }
+  console.log("user's preferred summary:", summary);
+
+  res.json({message: "summary saved successfully"});
+});
+
+app.post("/pdf/summary/analysis", (req, res) => {
+  const { userSummary } = req.body;
+
+  if (!userSummary || !lastGeneratedSummary) {
+    return res.status(400).json({ error: "both summaries are required for the analysis"});
+  }
+
+  const instructions = `
+
+  You are an advanced text summarization assistant. 
+
+  Consider two summaries:
+  - Summary 1: ${lastGeneratedSummary}
+  - Summary 2: ${userSummary}
+
+  Analyse both summaries and return in following format:
+  "1. Characteristics 1:" What are the characteristics of the Summary 1?
+  "2. Characteristics 2:" What are the characteristics of the Summary 2?
+  "3. Differences 1:" What differentiates Summary 1 from Summary 2?
+  "4. Differences 2:" What differentiates Summary 2 from Summary 1?
+
+  
+  `;
+  createThread()
+    .then((thread) => {
+      const thread_id = thread.id;
+      invokeAssistant(
+        assistant, 
+        thread_id,
+        "Compare summaries",
+        instructions
+      )
+        .then((comparisonResponse) => {
+          console.log("comparison analysis:", comparisonResponse); 
+          res.json({ comparison: comparisonResponse});
+        })
+        .catch((error) => {
+          res.status(500).json({
+            error:
+            "an error happened" + (error.response ? error.response.data : error.message),
+          });
+        });
+    })
+    .catch((error) => {
+      res.status(500).json({ error: "failed to create thread: " + error});
+    })
+})
+
+// // Endpoint to summarize all PDFs in the assets folder
+// app.get("/pdf/summary/all", (req, res) => {
+//   const assetsDir = path.join(__dirname, "assets");
+//   fs.readdir(assetsDir, (err, files) => {
+//     if (err) {
+//       return res
+//         .status(500)
+//         .json({ error: "Failed to read assets directory: " + err });
+//     }
+
+//     const pdfFiles = files.filter((file) => file.endsWith(".pdf"));
+//     const summaries = [];
+
+//     const processNextFile = () => {
+//       if (pdfFiles.length === 0) {
+//         return res.json({ summaries });
+//       }
+
+//       const pdfFilePath = path.join(assetsDir, pdfFiles.shift());
+//       const pdfParserInstance = new PDFParser();
+
+//       pdfParserInstance.on("pdfParser_dataError", (errData) => {
+//         summaries.push({
+//           file: pdfFilePath,
+//           error: "Failed to parse PDF: " + errData.parserError,
+//         });
+//         processNextFile();
+//       });
+
+//       pdfParserInstance.on("pdfParser_dataReady", (pdfData) => {
+//         const pdfText = extractTextFromPDFData(pdfData);
+
+//         const instructions = `
+
+//           You are an advanced text summarization assistant. 
+//           Follow these steps:
+
+//           Step 1. Read and consider the two example summaries:
+//           Summary 1: ${globalSummaries.summary1}
+//           Summary 2: ${globalSummaries.summary2}
+
+//           Step 2. Identidy and note the characteristics of each summaries (e.g., tone, style, clarity):
+//           Characteristics 1: ${globalCharacteristics.characteristics1}
+//           Characteristics 2: ${globalCharacteristics.characteristics2}
+          
+//           Step 3. Analyze the differences and what elements set summaries apart:
+//           Differences 1: ${globalDifferences.differences1}
+//           Differences 2: ${globalDifferences.differences2}
+
+//           Using this analysis, write and return in following format:
+//           1. Return a list of what you like (strength) and dislike (weaknesses) about each summary.
+//           2. Return a set of criterias for a good summary.
+//           3. Write two summaries similar to Summary 1 and Summary 2 for the new PDF file (max 100 words).
+//           ${pdfText}
+//           "- Summary (Book Name) 1:" 
+//           "- Summary (Book Name) 2:" 
+//         `;
+
+//         createThread()
+//           .then((thread) => {
+//             const thread_id = thread.id;
+//             invokeAssistant(
+//               assistant,
+//               thread_id,
+//               "Summarize PDF file",
+//               instructions
+//             )
+//               .then((response) => {
+//                 console.log("response", response);
+//                 summaries.push({ file: pdfFilePath, summary: response });
+//                 processNextFile();
+//               })
+//               .catch((error) => {
+//                 summaries.push({
+//                   file: pdfFilePath,
+//                   error:
+//                     "Failed to summarize PDF: " +
+//                     (error.response ? error.response.data : error.message),
+//                 });
+//                 processNextFile();
+//               });
+//           })
+//           .catch((error) => {
+//             summaries.push({
+//               file: pdfFilePath,
+//               error: "Failed to create thread: " + error,
+//             });
+//             processNextFile();
+//           });
+//       });
+
+//       pdfParserInstance.loadPDF(pdfFilePath);
+//     };
+
+//     processNextFile();
+//   });
+// });
 
 initializeAssistant().then(() => {
   app.listen(port, () => {
