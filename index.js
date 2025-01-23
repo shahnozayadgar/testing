@@ -156,23 +156,28 @@ app.get("/pdf/summary/all", (req, res) => {
 
         const instructions = `
 
-          Consider this analysis from a story:
-          
+          You are an advanced text summarization assistant. 
+          Follow these steps:
+
+          Step 1. Read and consider the two example summaries:
           Summary 1: ${globalSummaries.summary1}
           Summary 2: ${globalSummaries.summary2}
-          
+
+          Step 2. Identidy and note the characteristics of each summaries (e.g., tone, style, clarity):
           Characteristics 1: ${globalCharacteristics.characteristics1}
           Characteristics 2: ${globalCharacteristics.characteristics2}
           
+          Step 3. Analyze the differences and what elements set summaries apart:
           Differences 1: ${globalDifferences.differences1}
           Differences 2: ${globalDifferences.differences2}
 
-          Using this analysis, write two summaries similar to Summary 1 and Summary 2 for the new PDF file (max 100 words).
-           ${pdfText}
-
-           Return in following format:
-          "1. Summary (Book Name) 1:" 
-          "2. Summary (Book Name) 2:" 
+          Using this analysis, write and return in following format:
+          1. Return a list of what you like (strength) and dislike (weaknesses) about each summary.
+          2. Return a set of criterias for a good summary.
+          3. Write two summaries similar to Summary 1 and Summary 2 for the new PDF file (max 100 words).
+          ${pdfText}
+          "- Summary (Book Name) 1:" 
+          "- Summary (Book Name) 2:" 
         `;
 
         createThread()
