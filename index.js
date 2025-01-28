@@ -40,8 +40,6 @@ let globalDifferences = null;
 //global variables
 let lastGeneratedSummary = null;
 
-
-
 //backend enpoints
 
 //endpoint to summarize example.pdf from assets folder
@@ -64,7 +62,7 @@ let lastGeneratedSummary = null;
 
 //         Return in following format:
 //         "1. Summary 1:"
-//         "2. Summary 2:" 
+//         "2. Summary 2:"
 
 //         Analyse both summaries and return in following format:
 //         "1. Characteristics 1:" What are the characteristics of the Summary 1?
@@ -77,7 +75,7 @@ let lastGeneratedSummary = null;
 //       .then((thread) => {
 //         const thread_id = thread.id;
 //         invokeAssistant(
-//           assistant,  
+//           assistant,
 //           thread_id,
 //           "Summarize PDF file",
 //           instructions
@@ -148,7 +146,7 @@ app.get("/pdf/summary/one", (req, res) => {
       .then((thread) => {
         const thread_id = thread.id;
         invokeAssistant(
-          assistant,  
+          assistant,
           thread_id,
           "Summarize PDF file",
           instructions
@@ -177,12 +175,12 @@ app.get("/pdf/summary/one", (req, res) => {
 //endpoint to save the user's preferred summary
 app.post("/pdf/summary/save", (req, res) => {
   const { summary } = req.body;
-  if (!summary){
-    return res.status(400).json({error: "summary is required"});
+  if (!summary) {
+    return res.status(400).json({ error: "summary is required" });
   }
   //console.log("user's preferred summary:", summary);
 
-  res.json({message: "summary saved successfully"});
+  res.json({ message: "summary saved successfully" });
 });
 
 app.post("/pdf/summary/analysis", (req, res) => {
@@ -191,7 +189,9 @@ app.post("/pdf/summary/analysis", (req, res) => {
   //console.log("generated summary", lastGeneratedSummary)
 
   if (!userSummary || !lastGeneratedSummary) {
-    return res.status(400).json({ error: "both summaries are required for the analysis"});
+    return res
+      .status(400)
+      .json({ error: "both summaries are required for the analysis" });
   }
 
   const instructions = `
@@ -208,18 +208,13 @@ app.post("/pdf/summary/analysis", (req, res) => {
   createThread()
     .then((thread) => {
       const thread_id = thread.id;
-      invokeAssistant(
-        assistant, 
-        thread_id,
-        "Compare summaries",
-        instructions
-      )
+      invokeAssistant(assistant, thread_id, "Compare summaries", instructions)
         .then((comparisonResponse) => {
           //console.log("comparison", comparisonResponse)
           const match = comparisonResponse.match(
             /1\. Summary 1:\s*(.*?)\s*2\. Summary 2:\s*(.*?)\s*1\. Characteristics 1:\s*(.*?)\s*2\. Characteristics 2:\s*(.*?)\s*3\. Differences 1:\s*(.*?)\s*4\. Differences 2:\s*(.*)/s
           );
-          if (match){
+          if (match) {
             const summary1 = match[1].trim();
             const summary2 = match[2].trim();
             const characteristics1 = match[3].trim();
@@ -239,22 +234,30 @@ app.post("/pdf/summary/analysis", (req, res) => {
             console.log("differences 1", differences1);
             console.log("differences 2", differences2);
 
-            res.json({ summary1, summary2, characteristics1, characteristics2, differences1, differences2 });
+            res.json({
+              summary1,
+              summary2,
+              characteristics1,
+              characteristics2,
+              differences1,
+              differences2,
+            });
           }
-          //console.log("comparison analysis:", comparisonResponse); 
+          //console.log("comparison analysis:", comparisonResponse);
           //res.json({ comparison: comparisonResponse});
         })
         .catch((error) => {
           res.status(500).json({
             error:
-            "an error happened" + (error.response ? error.response.data : error.message),
+              "an error happened" +
+              (error.response ? error.response.data : error.message),
           });
         });
     })
     .catch((error) => {
-      res.status(500).json({ error: "failed to create thread: " + error});
-    })
-})
+      res.status(500).json({ error: "failed to create thread: " + error });
+    });
+});
 
 // Endpoint to summarize all PDFs in the assets folder
 app.post("/pdf/summary/all", (req, res) => {
@@ -289,24 +292,27 @@ app.post("/pdf/summary/all", (req, res) => {
         const pdfText = extractTextFromPDFData(pdfData);
 
         const instructions = `
+        ANALYSIS CONTEXT:
+        - Preferred Summary Style: ${globalCharacteristics.characteristics1}
+        - Contrast Style: ${globalCharacteristics.characteristics2}
+        - Key Differentiators: 
+          1. ${globalDifferences.differences1}
+          2. ${globalDifferences.differences2}
 
-          Consider this analysis from a story:
-          Summary 1: ${globalSummaries.summary1}
-          Summary 2: ${globalSummaries.summary2}
+        NEW STORY TO SUMMARIZE:
+        """
+        ${pdfText}
+        """
 
-          Characteristics 1: ${globalCharacteristics.characteristics1}
-          Characteristics 2: ${globalCharacteristics.characteristics2}
+        CREATE 2 SUMMARIES FOLLOWING THESE RULES:
+          1. First summary using preferred style
+          2. Second summary using contrast style
+          3. Max 100 words each
 
-          Differences 1: ${globalDifferences.differences1}
-          Differences 2: ${globalDifferences.differences2}
-
-          Using this analysis, write two summaries similar to Summary 1 and Summary 2 for the new story (within 150 words). 
-          ${pdfText}
-
-          Return in following format:
-          "1. Summary 1 (Book Name):"
-          "2. Summary 2 (Book Name):"
-        `;
+        FORMAT:
+          "1. [Book Name] Summary 1: [content]"
+          "2. [Book Name] Summary 2: [content]"
+`;
 
         createThread()
           .then((thread) => {
@@ -318,8 +324,21 @@ app.post("/pdf/summary/all", (req, res) => {
               instructions
             )
               .then((response) => {
-                console.log("response", response);
-                summaries.push({ file: pdfFilePath, summary: response });
+                const match = response.match(
+                  /1\. (.*?) Summary 1:\s*(.*?)\s*2\. (.*?) Summary 2:\s*(.*)/s
+                );
+                if (match) {
+                  const bookName1 = match[1].trim();
+                  const summary1 = match[2].trim();
+                  const bookName2 = match[3].trim();
+                  const summary2 = match[4].trim();
+
+                  summaries.push({
+                    file: pdfFilePath, 
+                    bookName: bookName1,
+                    summaries:{summary1, summary2}
+                  });
+                }
                 processNextFile();
               })
               .catch((error) => {

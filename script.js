@@ -70,6 +70,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     })
 
     //Add event listener for the generate button
+    // generateStoriesButton.addEventListener('click', async () => {
+    //     try {
+    //         const allSummariesResponse = await fetch('http://localhost:3000/pdf/summary/all', {
+    //             method: 'POST',
+    //             headers: {
+    //                 'Content-Type': 'application/json',
+    //             },
+    //         });
+
+    //         if (!allSummariesResponse.ok) {
+    //             throw new Error('Failed to fetch all summaries');
+    //         }
+
+    //         const allSummariesData = await allSummariesResponse.json();
+    //         console.log(allSummariesData.summaries);
+
+    //         // Display all summaries in the allSummariesContainer
+    //         allSummariesContainer.innerHTML = allSummariesData.summaries.map(summary => `
+    //             <div>
+    //                 <h4>${summary.file}</h4>
+    //                 <p>${summary.summary || summary.error}</p>
+    //             </div>
+    //         `).join('');
+    //     } catch (error) {
+    //         allSummariesContainer.innerHTML = `<p>Error fetching all summaries: ${error.message}</p>`;
+    //     }
+    // });
     generateStoriesButton.addEventListener('click', async () => {
         try {
             const allSummariesResponse = await fetch('http://localhost:3000/pdf/summary/all', {
@@ -78,23 +105,69 @@ document.addEventListener('DOMContentLoaded', async () => {
                     'Content-Type': 'application/json',
                 },
             });
-
+    
             if (!allSummariesResponse.ok) {
                 throw new Error('Failed to fetch all summaries');
             }
-
+    
             const allSummariesData = await allSummariesResponse.json();
-            console.log(allSummariesData.summaries);
-
-            // Display all summaries in the allSummariesContainer
-            allSummariesContainer.innerHTML = allSummariesData.summaries.map(summary => `
-                <div>
-                    <h4>${summary.file}</h4>
-                    <p>${summary.summary || summary.error}</p>
-                </div>
-            `).join('');
+            console.log('Raw response:', allSummariesData);
+    
+            // Process and display the summaries
+            allSummariesContainer.innerHTML = allSummariesData.summaries.map(summary => {
+                // Handle error cases first
+                if (summary.error) {
+                    return `
+                        <div class="summary-error">
+                            <h4>${path.basename(summary.file)}</h4>
+                            <p>Error: ${summary.error}</p>
+                        </div>
+                    `;
+                }
+    
+                // Handle successful parsed summaries
+                if (summary.bookName && summary.summaries) {
+                    return `
+                        <div class="summary-item">
+                            <h3>${summary.bookName}</h3>
+                            <div class="summary-pair">
+                                <div class="summary-version">
+                                    <h4>Version 1 (${summary.summaries.characteristics1 || 'Default Style'})</h4>
+                                    <p>${summary.summaries.summary1}</p>
+                                </div>
+                                <div class="summary-version">
+                                    <h4>Version 2 (${summary.summaries.characteristics2 || 'Alternative Style'})</h4>
+                                    <p>${summary.summaries.summary2}</p>
+                                </div>
+                            </div>
+                            ${summary.differences ? `
+                            <div class="differences">
+                                <h4>Key Differences:</h4>
+                                <ul>
+                                    ${Object.values(summary.differences).map(diff => `<li>${diff}</li>`).join('')}
+                                </ul>
+                            </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+    
+                // Fallback for unexpected format
+                return `
+                    <div class="summary-error">
+                        <h4>${path.basename(summary.file)}</h4>
+                        <p>Unexpected response format</p>
+                        <pre>${JSON.stringify(summary, null, 2)}</pre>
+                    </div>
+                `;
+            }).join('');
+            
         } catch (error) {
-            allSummariesContainer.innerHTML = `<p>Error fetching all summaries: ${error.message}</p>`;
+            allSummariesContainer.innerHTML = `
+                <div class="error">
+                    <p>Error fetching all summaries: ${error.message}</p>
+                </div>
+            `;
         }
     });
 });
