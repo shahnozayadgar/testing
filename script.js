@@ -2,6 +2,8 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const summaryContainer = document.getElementById('summary-container');
     const saveButton = document.getElementById('save-summary');
+    const generateStoriesButton = document.getElementById('generate-stories');
+    const allSummariesContainer = document.getElementById('all-summary')
 
     try {
         const response = await fetch('http://localhost:3000/pdf/summary/one');
@@ -67,42 +69,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     })
 
-    // //adding event handler for the save summary button
-    // document.querySelector('button').addEventListener('click', async () => {
-    //     const userSummary = document.getElementById('editable-summary').innerText; // Get the value from the editable div
-    //     if (userSummary) {
-    //         try {
-    //             const response = await fetch('http://localhost:3000/pdf/summary/save', {
-    //                 method: 'POST',
-    //                 headers: {
-    //                     'Content-Type': 'application/json',
-    //                 },
-    //                 body: JSON.stringify({ summary: userSummary }),
-    //             });
-    //             if (!response.ok) {
-    //                 throw new Error('Failed to save summary');
-    //             }
-    //             const result = await response.json();
-    //             alert(result.message);
+    //Add event listener for the generate button
+    generateStoriesButton.addEventListener('click', async () => {
+        try {
+            const allSummariesResponse = await fetch('http://localhost:3000/pdf/summary/all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
 
-    //             //comparing the messages
-    //             const comparisonResponse = await fetch('http://localhost:3000/pdf/summary/analysis', {
-    //                 method: 'POST',
-    //                 headers: {
-    //                     'Content-Type': 'application/json',
-    //                 },
-    //                 body: JSON.stringify({ userSummary }),
-    //             });
-    //             if (!comparisonResponse.ok) {
-    //                 throw new Error('Failed to compare summaries');
-    //             }
-    //             const comparisonResult = await comparisonResponse.json();
-    //             //alert('Comparison Result: ' + comparisonResult.comparison);
-    //         } catch (error) {
-    //             alert('Error saving summary: ' + error.message);
-    //         }
-    //     } else {
-    //         alert('Please write your preferred summary before saving.');
-    //     }
-    // });
+            if (!allSummariesResponse.ok) {
+                throw new Error('Failed to fetch all summaries');
+            }
+
+            const allSummariesData = await allSummariesResponse.json();
+            console.log(allSummariesData.summaries);
+
+            // Display all summaries in the allSummariesContainer
+            allSummariesContainer.innerHTML = allSummariesData.summaries.map(summary => `
+                <div>
+                    <h4>${summary.file}</h4>
+                    <p>${summary.summary || summary.error}</p>
+                </div>
+            `).join('');
+        } catch (error) {
+            allSummariesContainer.innerHTML = `<p>Error fetching all summaries: ${error.message}</p>`;
+        }
+    });
 });

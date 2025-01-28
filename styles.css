@@ -61,3 +61,38 @@ textarea {
     display: block;
     background-color: #f9f9f9;
 }
+/* New styles for summary cards */
+.summary-card {
+    margin: 20px 0;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.summary-card h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    color: #333;
+    font-size: 1.2em;
+}
+
+.summary-content {
+    white-space: pre-wrap;
+    line-height: 1.5;
+    color: #444;
+}
+
+.error {
+    color: #dc2626;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #fef2f2;
+    border: 1px solid #fee2e2;
+    border-radius: 5px;
+}
+
+#all-summaries-container {
+    margin-top: 30px;
+}
