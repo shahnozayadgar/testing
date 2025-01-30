@@ -195,53 +195,45 @@ app.post("/pdf/summary/analysis", (req, res) => {
   }
 
   const instructions = `
-  You are an advanced text summarization assistant. 
+  Analyze these summaries and STRICTLY follow this format:
 
-  Consider two summaries and return in following format:
-  "1. Summary 1:" ${lastGeneratedSummary}
-  "2. Summary 2:" ${userSummary}
-  "1. Characteristics 1:" What are the characteristics of the Summary 1?
-  "2. Characteristics 2:" What are the characteristics of the Summary 2?
-  "3. Differences 1:" What differentiates Summary 1 from Summary 2?
-  "4. Differences 2:" What differentiates Summary 2 from Summary 1?
+  [Original Summary 1]
+  ${lastGeneratedSummary}
+
+  [User Summary 2]
+  ${userSummary}
+
+  1. Characteristics 1: [Analysis of Summary 1]
+  2. Characteristics 2: [Analysis of Summary 2]
+  3. Differences 1: [What makes Summary 1 unique]
+  4. Differences 2: [What makes Summary 2 unique]
+
+  Do not include summary texts, only analysis.
   `;
   createThread()
     .then((thread) => {
       const thread_id = thread.id;
       invokeAssistant(assistant, thread_id, "Compare summaries", instructions)
         .then((comparisonResponse) => {
-          //console.log("comparison", comparisonResponse)
+          console.log("comparison", comparisonResponse)
           const match = comparisonResponse.match(
-            /1\. Summary 1:\s*(.*?)\s*2\. Summary 2:\s*(.*?)\s*1\. Characteristics 1:\s*(.*?)\s*2\. Characteristics 2:\s*(.*?)\s*3\. Differences 1:\s*(.*?)\s*4\. Differences 2:\s*(.*)/s
-          );
-          if (match) {
-            const summary1 = match[1].trim();
-            const summary2 = match[2].trim();
-            const characteristics1 = match[3].trim();
-            const characteristics2 = match[4].trim();
-            const differences1 = match[5].trim();
-            const differences2 = match[6].trim();
-
-            //storing the extracted values in global variables
-            globalSummaries = { summary1, summary2 };
-            globalCharacteristics = { characteristics1, characteristics2 };
-            globalDifferences = { differences1, differences2 };
-
-            console.log("summary 1", summary1);
-            console.log("summary 2", summary2);
-            console.log("characterisitcs 1", characteristics1);
-            console.log("characteristics 2", characteristics2);
-            console.log("differences 1", differences1);
-            console.log("differences 2", differences2);
-
-            res.json({
-              summary1,
-              summary2,
-              characteristics1,
-              characteristics2,
-              differences1,
-              differences2,
-            });
+            /1\. Characteristics 1:\s*(.*?)\s*2\. Characteristics 2:\s*(.*?)\s*3\. Differences 1:\s*(.*?)\s*4\. Differences 2:\s*(.*)/s          );
+            if (match) {
+              globalCharacteristics = {
+                characteristics1: match[1].trim(),
+                characteristics2: match[2].trim()
+              };
+              globalDifferences = {
+                differences1: match[3].trim(),
+                differences2: match[4].trim()
+              };
+  
+              res.json({
+                originalSummary: lastGeneratedSummary,
+                editedSummary: userSummary,
+                ...globalCharacteristics,
+                ...globalDifferences
+              });
           }
           //console.log("comparison analysis:", comparisonResponse);
           //res.json({ comparison: comparisonResponse});
@@ -261,6 +253,8 @@ app.post("/pdf/summary/analysis", (req, res) => {
 
 // Endpoint to summarize all PDFs in the assets folder
 app.post("/pdf/summary/all", (req, res) => {
+  const { originalSummary, editedSummary } = req.body;
+
   const assetsDir = path.join(__dirname, "assets");
   fs.readdir(assetsDir, (err, files) => {
     if (err) {
@@ -290,29 +284,27 @@ app.post("/pdf/summary/all", (req, res) => {
 
       pdfParserInstance.on("pdfParser_dataReady", (pdfData) => {
         const pdfText = extractTextFromPDFData(pdfData);
+        //console.log("Extracted PDF text:", pdfText);
 
         const instructions = `
-        ANALYSIS CONTEXT:
-        - Preferred Summary Style: ${globalCharacteristics.characteristics1}
-        - Contrast Style: ${globalCharacteristics.characteristics2}
-        - Key Differentiators: 
-          1. ${globalDifferences.differences1}
-          2. ${globalDifferences.differences2}
 
-        NEW STORY TO SUMMARIZE:
-        """
+        Consider this analysis from a story:
+        Summary 1: ${originalSummary}
+        Summary 2: ${editedSummary}
+        Characteristics 1: ${globalCharacteristics.characteristics1}
+        Characteristics 2: ${globalCharacteristics.characteristics2}
+        Differences 1: ${globalDifferences.differences1}
+        Differences 2: ${globalDifferences.differences2}
+
+        Using this analysis, write two summaries similar to to Summary 1 and Summary 2 for the new PDF file. 
         ${pdfText}
-        """
 
-        CREATE 2 SUMMARIES FOLLOWING THESE RULES:
-          1. First summary using preferred style
-          2. Second summary using contrast style
-          3. Max 100 words each
-
-        FORMAT:
+        Return in following format:
           "1. [Book Name] Summary 1: [content]"
           "2. [Book Name] Summary 2: [content]"
 `;
+    console.log("Instructions about to send to AI:", instructions);
+
 
         createThread()
           .then((thread) => {
@@ -324,6 +316,7 @@ app.post("/pdf/summary/all", (req, res) => {
               instructions
             )
               .then((response) => {
+                console.log(response)
                 const match = response.match(
                   /1\. (.*?) Summary 1:\s*(.*?)\s*2\. (.*?) Summary 2:\s*(.*)/s
                 );
